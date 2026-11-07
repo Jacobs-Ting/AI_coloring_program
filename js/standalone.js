@@ -59,13 +59,21 @@ async function transparentLineart(source){
  for(let i=0;i<d.length;i+=4){const light=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];d[i+3]=Math.round(d[i+3]*Math.max(0,Math.min(1,(245-light)/200)));d[i]=d[i+1]=d[i+2]=0;}
  ctx.putImageData(pixels,0,0);return canvas.toDataURL('image/png');
 }
+// Personal-key mode: send the user's temporary key directly to OpenAI over HTTPS.
 class AILineartProvider{
  async generate({signal,apiKey}={}){
- if(!/^https?:$/.test(location.protocol))throw new Error('請關閉這個檔案頁面，改為雙擊資料夾中的「啟動魔法塗色屋.command」。它會自動啟動 AI 服務並開啟網頁，再於新頁面輸入 API Key。');
- const response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json','X-OpenAI-Key':apiKey},body:'{}',signal});
- const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'AI 服務未啟動，請使用 README 中的 AI 啟動方式。');
- if(typeof data.id!=='string'||!data.id.startsWith('ai-')||typeof data.title!=='string')throw new Error('AI 回傳資料格式無效');
- return{id:data.id,title:data.title.slice(0,100),url:await transparentLineart(data.image),generated:true};
+ if(!apiKey?.trim())throw new Error('請先在 API Key 設定輸入自己的 OpenAI API Key。');
+ const themes=[['小熊花園','a bear in a flower garden'],['貓咪午茶','a kitten having afternoon tea'],['兔兔野餐','a rabbit having a picnic'],['森林小屋','a cozy woodland cottage'],['甜點派對','cupcakes and strawberries'],['狐狸與星星','a little fox watching stars']];
+ const [title,subject]=themes[Math.floor(Math.random()*themes.length)];
+ let response;
+ try{response=await fetch('https://api.openai.com/v1/images/generations',{
+ method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey.trim()}`},signal,
+ body:JSON.stringify({model:'gpt-image-2.5-sunburst',n:1,size:'1024x1024',quality:'low',output_format:'png',background:'opaque',prompt:`Original children's coloring book page: ${subject}. Pure black clean bold rounded outlines on pure white background. Large closed shapes with white unfilled interiors, generous coloring spaces and empty margins. No gray shading, colors, gradients, textures, text, watermarks, logos or copyrighted characters.`})
+ });}catch(e){if(e.name==='AbortError')throw e;throw new Error('無法連線至 OpenAI。請檢查網路、瀏覽器是否允許跨來源請求，以及所在地是否支援 OpenAI API。');}
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok){const messages={401:'API Key 無效，請重新貼上完整金鑰。',403:'此帳號無模型權限，請檢查 OpenAI 專案設定。',429:'OpenAI 額度不足或請求過多，請檢查 API 帳務與用量。'};throw new Error(messages[response.status]||`OpenAI 生成失敗（${response.status}），請稍後再試。`);}
+ const source=data.data?.[0]?.b64_json;if(typeof source!=='string')throw new Error('OpenAI 未回傳圖片，請稍後再試。');
+ return{id:`ai-${crypto.randomUUID()}`,title:`AI · ${title}`,url:await transparentLineart(`data:image/png;base64,${source}`),generated:true};
  }
 }
 
