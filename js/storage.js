@@ -1,0 +1,4 @@
+let dbPromise;
+function database(){if(!dbPromise)dbPromise=new Promise((resolve,reject)=>{const req=indexedDB.open('magic-coloring-house',1);req.onupgradeneeded=()=>req.result.createObjectStore('artworks',{keyPath:'id'});req.onsuccess=()=>{req.result.onversionchange=()=>req.result.close();resolve(req.result);};req.onerror=()=>reject(req.error);req.onblocked=()=>reject(new Error('請先關閉其他舊版本分頁'));}).catch(e=>{dbPromise=null;throw e;});return dbPromise;}
+async function run(mode,action){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('artworks',mode);let result;const req=action(tx.objectStore('artworks'));req.onsuccess=()=>result=req.result;tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('儲存交易中止'));});}
+export const storage={save:art=>run('readwrite',s=>s.put(art)),list:()=>run('readonly',s=>s.getAll()),delete:id=>run('readwrite',s=>s.delete(id))};
